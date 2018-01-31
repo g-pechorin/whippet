@@ -26,14 +26,13 @@ whippet::guid_t whippet::entity::guid(void) const
 
 void whippet::entity::remove(void)
 {
-
 	// detach all components
 	// ... this loops is a bit weird; sorry
-	while (true)
-	{
-		whippet::_component* attached = nullptr;
+	whippet::_component* attached;
+	do {
+		attached = nullptr;
 
-		forany<whippet::_component*>(attached, [](whippet::_component*& attached, whippet::_component& component)
+		visit<whippet::_component*>(attached, [](whippet::_component*& attached, whippet::_component& component)
 		{
 			assert(nullptr == attached);
 			attached = &component;
@@ -41,11 +40,9 @@ void whippet::entity::remove(void)
 		});
 
 		// did we find something?
-		if (!attached)
-			break;
-
-		attached->detach();
-	}
+		if (attached)
+			attached->detach();
+	} while (attached);
 }
 
 whippet::universe& whippet::entity::world(void) const

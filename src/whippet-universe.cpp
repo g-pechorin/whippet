@@ -35,21 +35,34 @@ void whippet::universe::guid_release(whippet::guid_t guid)
 	assert(_guid_active.end() == _guid_active.find(guid));
 }
 
-void whippet::universe::forall_(whippet::guid_t entity_guid, std::type_index provider_type, void* userdata, bool(*callback)(void*, void*))
+void whippet::universe::visit_(const whippet::guid_t entity_guid, const std::type_index provider_type, void* userdata, bool(*callback)(void*, void*))
 {
-	assert(_providers.contains(provider_type));
-	_providers[provider_type]->forall(entity_guid, userdata, callback);
-}
+	assert((std::type_index(typeid(whippet::_component)) == provider_type) || _providers.contains(provider_type));
 
-void whippet::universe::forany_(const whippet::guid_t entity_guid, void*userdata, bool(*callback)(void*, whippet::_component*))
-{
-	for (auto& provider : _providers)
-		provider.second->forany(entity_guid, userdata, callback);
+	if (std::type_index(typeid(whippet::_component)) != provider_type)
+		_providers[provider_type]->visit(
+			entity_guid, false,
+			userdata, callback
+		);
+	else
+		for (auto& provider : _providers)
+			// allow the inners to break out of the full-visit
+			if (!provider.second->visit(
+				entity_guid, true,
+				userdata, callback
+			))
+				return;
 }
 
 bool whippet::universe::installed_(std::type_index kind)const
 {
 	return _providers.contains(kind);
+}
+
+void whippet::universe::weed(void)
+{
+	for (auto& kv : _providers)
+		kv.second->weed();
 }
 
 whippet::universe::~universe(void)

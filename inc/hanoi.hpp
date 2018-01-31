@@ -1,14 +1,13 @@
 
-/// Peter LaValle
-/// 2018-01-15
-///
-/// WIP
-///
-/// this provides a contiguous container for objects
-/// - proper object lifecycle
-/// - includes iteration
-/// - emplace to an unspecified location
-///
+// Peter LaValle
+// 2018-01-15
+//
+// this provides a contiguous container for objects
+// - proper object lifecycle
+// - includes iteration
+// - emplace to an unspecified location
+// - needs inuse() and clean() methods on data object
+//
 #pragma once
 
 #include <assert.h>
@@ -16,6 +15,7 @@
 
 #include <vector>
 #include <array>
+#include <algorithm>
 #include <memory>
 
 #include "generator.hpp"
@@ -23,28 +23,47 @@
 template <typename E>
 class hanoi final
 {
+	static const uint8_t LAYER_SIZE_INITIAL = 14;
+	static const uint8_t LAYER_SIZE_EXPAND = 3;
+	static const uint8_t LAYER_SIZE_LIMIT = 143;
+
+	static_assert(0 <= LAYER_SIZE_INITIAL, "the initial size of the layers must be > 0");
+
 	friend struct iterator_forward;
 
-	// TODO; offer byte alignment
+	// TODO; perform byte alignment
 
-	struct entry final
+	class entry final
 	{
 		uint8_t _data[sizeof(E)];
-		bool _live;
+	public:
+		E* get(void) { return reinterpret_cast<E*>(_data); }
 
-		entry(void) :
-			_live(false)
+		const E* see(void) const { return reinterpret_cast<const E*>(_data); }
+
+		static bool inuse(const entry* e)
 		{
+			return E::inuse(e->see());
 		}
 
-		E* get(void) { return reinterpret_cast<E*>(_data); }
+		static void clean(entry* e)
+		{
+			E::clean(e->get());
+			assert(!inuse(e));
+		}
+
+		entry(void)
+		{
+			clean(this);
+		}
 
 		~entry(void)
 		{
-			assert(!_live);
+			assert(!inuse(this));
 		}
 	};
 
+	/// layers contain (some number of) entries
 	struct layer final
 	{
 		std::vector<entry> _data;
@@ -56,21 +75,32 @@ class hanoi final
 		{
 		}
 
-		~layer(void)
+		/// "weed" out empty layers
+		void weed(std::unique_ptr<layer>& self)
 		{
+			// first; do the next one
+			if (_next)
+				_next->weed(_next);
+
+			// scan for an in-use item and return IFF one exists
+			for (auto & e : _data)
+				if (entry::inuse(&e))
+					return;
+
+			// cool; nothing is being used in *this* layer - wipe it out
+			self = std::move(_next);
 		}
 	};
 
 	std::unique_ptr<layer> _data = nullptr;
 
+	template<const bool LIVE>
 	$generator(layer_iterator)
 	{
-		const bool _live;
 		uint32_t _entry;
 		typename layer* _layer;
 
-		layer_iterator(layer* _, bool live) :
-			_live(live),
+		layer_iterator(layer* _) :
 			_layer(_)
 		{
 		}
@@ -79,26 +109,32 @@ class hanoi final
 		{
 			for (; nullptr != _layer; _layer = _layer->_next.get())
 				for (_entry = 0; _entry < _layer->_data.size(); ++_entry)
-					if (_live == _layer->_data[_entry]._live)
+					if (LIVE == entry::inuse(_layer->_data.data() + _entry))
 						$yield(&(_layer->_data[_entry]));
 		}
 		$stop;
 	};
 public:
 
+	/// allows "weeding" unused data
+	void weed(void) { if (_data) _data->weed(_data); }
+
 	struct iterator_forward final
 	{
 		iterator_forward(void) = delete;
 		~iterator_forward(void);
 
-
 		E& operator*(void);
+		E* operator->(void);
+
 		iterator_forward& operator++(void);
+
 		bool operator!=(const iterator_forward&) const;
 		bool operator==(const iterator_forward&) const;
+
 	private:
 		friend class hanoi<E>;
-		typename layer_iterator _inner;
+		typename layer_iterator<true> _inner;
 		typename entry* _last;
 
 		iterator_forward(typename layer*);
@@ -121,21 +157,20 @@ public:
 	bool empty(void) { return begin() == end(); }
 
 	/// erase the referenced element
-	/// ... TODO; this could be done better
 	void erase(E& element)
 	{
 		assert(nullptr != _data);
 
 		for (auto it = begin(); it != end(); ++it)
 		{
-			if (reinterpret_cast<size_t>(&element) != reinterpret_cast<size_t>(&(*it)))
+			if ((&element) != &(*it))
 				continue;
 
 			erase(it);
 			return;
 		}
 
-		assert(false && "tried to erase non-existant element");
+		warn("tried to erase non-existant element");
 	}
 };
 
@@ -150,26 +185,42 @@ inline
 E& hanoi<E>::emplace_unspecified(ARGS&& ... args)
 {
 	hanoi<E>::entry* place;
-	hanoi<E>::layer_iterator layers(_data.get(), false);
+	hanoi<E>::layer_iterator<false> layers(_data.get());
 
 	// see if there's a place in an old layer
 	if (layers(place))
 	{
 		// this spot is free!
-		assert(false == place->_live);
+		assert(!hanoi<E>::entry::inuse(place));
 
-		// CLAIM IT! (the inner code might try to do the same ... don't ask)
-		place->_live = true;
+		// create a component (remeber that you should mark it as used ASAP)
+		auto emplaced = new (place->get()) E(args...);
 
+		// check to be sure that worked
+		assert(hanoi<E>::entry::inuse(place));
 
-		// settle in
-		return *(new (place->get()) E(args...));
+		// return the result
+		return *emplaced;
 	}
 
 	// add a new layer
-	std::unique_ptr<layer> next = std::make_unique<layer>(nullptr != _data ? _data->_data.size() + 2 : 3);
-	next->_next = std::move(_data);
-	_data = std::move(next);
+	{
+		// determine grown size
+		size_t size = nullptr != _data
+			? _data->_data.size() + hanoi::LAYER_SIZE_EXPAND
+			: hanoi::LAYER_SIZE_INITIAL;
+
+		// limit if applicable
+		if (hanoi::LAYER_SIZE_LIMIT)
+			size = std::min<size_t>(hanoi::LAYER_SIZE_LIMIT, size);
+
+		// create the layer
+		std::unique_ptr<layer> next = std::make_unique<layer>(size);
+
+		// put the layer into place
+		next->_next = std::move(_data);
+		_data = std::move(next);
+	}
 
 	// recur
 	return emplace_unspecified(args...);
@@ -180,21 +231,19 @@ inline
 void hanoi<E>::erase(typename const hanoi<E>::iterator_forward& position)
 {
 	assert(nullptr != position._last);
-	assert(position._last->_live);
 
-	if (position._last->_live)
+	assume(hanoi<E>::entry::inuse(position._last));
+	if (hanoi<E>::entry::inuse(position._last))
 	{
-		reinterpret_cast<E*>(position._last->_data)->~E();
-		position._last->_live = false;
+		position._last->get()->~E();
 	}
-
-	// TODO; wipeout totally empty layers
+	assume(!(hanoi<E>::entry::inuse(position._last)));
 }
 
 template <typename E>
 inline
 hanoi<E>::iterator_forward::iterator_forward(typename hanoi<E>::layer* layer) :
-	_inner(layer, true)
+	_inner(layer)
 {
 	if (!(_inner(_last)))
 		_last = nullptr;
@@ -204,7 +253,14 @@ template <typename E>
 inline
 E& hanoi<E>::iterator_forward::operator*(void)
 {
-	return *reinterpret_cast<E*>(_last->_data);
+	return *(_last->get());
+}
+
+template <typename E>
+inline
+E* hanoi<E>::iterator_forward::operator->(void)
+{
+	return _last->get();
 }
 
 template <typename E>

@@ -34,7 +34,7 @@ pal_cpp uint32_t pal::adler::operator()(void) const
 
 pal_cpp pal::adler pal::adler:: operator << (const char* s) const
 {
-	return (*s) ? pal::adler(*this, *s) << (1 + s) : *this;
+	return (s && *s) ? pal::adler(*this, *s) << (1 + s) : *this;
 }
 
 pal_cpp pal::adler pal::adler::operator << (const char c) const
@@ -43,25 +43,16 @@ pal_cpp pal::adler pal::adler::operator << (const char c) const
 }
 
 pal_cpp pal::adler::sum::sum(const char* text) :
-	_hash(pal::adler() << text)
+	pal::strong<uint32_t>::strong(pal::adler() << text)
 {
 }
 
 pal_cpp pal::adler::sum::sum(const pal::adler& adler) :
-	_hash(adler)
+	pal::strong<uint32_t>::strong(adler)
 {
 }
 
-#define pal_adler_sum_operator(OP) \
-pal_cpp bool pal::adler::sum::operator OP(const char* text)const \
-{ \
-	return _hash OP pal::adler::sum(text)._hash; \
-} \
 
-pal_adler_sum_operator(== );
-pal_adler_sum_operator(!= );
-pal_adler_sum_operator(<= );
-pal_adler_sum_operator(>= );
-pal_adler_sum_operator(< );
-pal_adler_sum_operator(> )
+pal__operator_implement(pal_cpp,pal::adler::sum, _weak, const char*, pal::adler::sum(them)._weak);
 
+pal__operator_implement(pal_cpp,pal::adler::sum, _weak, const pal::adler::sum, them._weak);

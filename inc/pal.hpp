@@ -40,18 +40,30 @@
 #	define STUB(MESSAGE, ...) fael(MESSAGE, __VA_ARGS__)
 #	define TODO(MESSAGE, ...) do { static bool TODO = true; if (TODO) { TODO = false; fflush(stdout); fprintf(stderr, "TODO: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr, _fail_line_ "\n"); fflush(stderr); } } while(false)
 
+// like assert, but, doesn't exit
+#	define assume(CONDITION, ...) do { if (!(CONDITION)) { fflush(stdout); fprintf(stderr, "ASSUMPTION; "  #CONDITION "\n"); fprintf(stderr, ""  __VA_ARGS__); fprintf(stderr, _fail_line_ "\n"); fflush(stderr); } } while (false)
+
+// like assert, but, it's always used
+#	define require(CONDITION, ...) do { if (!(CONDITION)) { fflush(stdout); fprintf(stderr, "REQUIREMENT: " #CONDITION "\n"); fprintf(stderr, "" __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } } while (false)
+
+// an assert that takes a long message
+#	define passert(CONDITION, ...) do { if (!(CONDITION)) { fflush(stdout); fprintf(stderr, "ASSERT: " #CONDITION "\n"); fprintf(stderr, "" __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } } while (false)
+
+
+#define debug_var(NAME,VALUE) auto NAME = (VALUE)
 #else
 
-// if !_DEBUG fail just exits
 #	define fael(MESSAGE, ...) do { exit(EXIT_FAILURE); } while(false)
-// like fail but, no exit 
 #	define warn(MESSAGE, ...) do { ; } while(false) 
+#	define assume(CONDITION, ...) do { ; } while(false) 
+#	define require(CONDITION, ...) do { if (!(CONDITION)) { exit(EXIT_FAILURE); } } while (false)
+#	define passert(CONDITION, ...) do { } while (false)
+
+#define debug_var(NAME,VALUE) 
 #endif
 
 #define WARN(MESSAGE) warn(MESSAGE _fail_line_)
 
-#define require(CONDITION) do { if (!(CONDITION)) { fael("REQUIREMENT FAILED; %s", #CONDITION); } } while (false)
-#define assume(CONDITION) do { if (!(CONDITION)) { warn("ASSUMPTION FAILED; %s" , #CONDITION); } } while (false)
 
 #ifdef _MSC_VER
 #	define NOINLINE __declspec(noinline)
@@ -67,55 +79,28 @@
 		bool operator<(T them)const { return (A) < (B); }; \
 		bool operator>(T them)const { return (A) > (B); };
 
+#define pal__operator_prototypes(T) \
+		bool operator==(T)const; \
+		bool operator!=(T)const; \
+		bool operator<=(T)const; \
+		bool operator>=(T)const; \
+		bool operator<(T)const; \
+		bool operator>(T)const;
+
+
+#define pal__operator_implement(M, C, A, T, B) \
+	bool C :: operator==(T them)const { return (A) == (B); }; \
+	bool C :: operator!=(T them)const { return (A) != (B); }; \
+	bool C :: operator<=(T them)const { return (A) <= (B); }; \
+	bool C :: operator>=(T them)const { return (A) >= (B); }; \
+	bool C :: operator<(T them)const { return (A) < (B); }; \
+	bool C :: operator>(T them)const { return (A) > (B); };
 
 namespace pal
 {
 	//
 	// Phase 1
 	//
-
-	struct adler final
-	{
-		const static uint32_t MOD_ADLER = 65521;
-
-		const uint32_t _a;
-		const uint32_t _b;
-
-		adler(void);
-
-		adler(const adler&, const char);
-
-		adler operator << (const char) const;
-
-		adler operator << (const char*) const;
-
-		adler operator()(const size_t, const char*) const;
-
-		uint32_t operator()(void) const;
-
-		operator uint32_t(void) const;
-
-		struct sum
-		{
-			const uint32_t _hash;
-
-			// TODO; save std::string here durring debug?
-
-			sum(const char*);
-			sum(const adler&);
-
-			bool operator==(const char*)const;
-			bool operator!=(const char*)const;
-			bool operator<=(const char*)const;
-			bool operator>=(const char*)const;
-			bool operator<(const char*)const;
-			bool operator>(const char*)const;
-
-			operator const uint32_t(void) const { return _hash; }
-		};
-
-
-	};
 
 	template<typename K, typename V>
 	struct map : std::map<K, V>
@@ -197,7 +182,7 @@ namespace pal
 		strong(const T& weak) : _weak(weak) {}
 		strong<T>& operator=(const T& weak) { _weak = weak; return *this; }
 
-		T & operator*(void) { return _weak; }
+		T& operator*(void) { return _weak; }
 
 		pal__operator_inlaid(const T&, _weak, them);
 		pal__operator_inlaid(const strong<T>&, _weak, them._weak);
@@ -206,6 +191,39 @@ namespace pal
 	//
 	// Phase 2
 	//
+
+	struct adler final
+	{
+		const static uint32_t MOD_ADLER = 65521;
+
+		const uint32_t _a;
+		const uint32_t _b;
+
+		adler(void);
+
+		adler(const adler&, const char);
+
+		adler operator << (const char) const;
+
+		adler operator << (const char*) const;
+
+		adler operator()(const size_t, const char*) const;
+
+		uint32_t operator()(void) const;
+
+		operator uint32_t(void) const;
+
+		struct sum : strong<uint32_t>
+		{
+			// TODO; save std::string here durring debug?
+
+			sum(const char*);
+			sum(const adler&);
+
+			pal__operator_prototypes(const char*);
+			pal__operator_prototypes(const sum);
+		};
+	};
 
 	template<typename E>
 	class event_manager final

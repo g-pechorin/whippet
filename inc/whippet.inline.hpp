@@ -1,7 +1,19 @@
 
+#pragma once
+
 #include "whippet.hpp"
 
 #include <array>
+
+template<typename C>
+inline
+C* whippet::_component::as(void)
+{
+	return reinterpret_cast<C*>(
+		_manager->as(
+			std::type_index(typeid(C)),
+			this));
+}
 
 template<typename C, typename ... ARGS>
 inline
@@ -16,23 +28,22 @@ C& whippet::entity::attach(ARGS&&... args)
 }
 
 template<typename T, typename C>
-void whippet::entity::forall(T& userdata, bool(*callback)(T&, C&))
+void whippet::entity::visit(T& userdata, bool(*callback)(T&, C&))
 {
-	_world->forall_(
-		_guid,
-		std::type_index(typeid(C)),
+	_world->visit_(
+		_guid, std::type_index(typeid(C)),
 		reinterpret_cast<void*>(&userdata),
 		reinterpret_cast<bool(*)(void*, void*)>(callback)
 	);
 }
 
 template<typename T>
-void whippet::entity::forany(T& userdata, bool(*callback)(T&, whippet::_component&))
+void whippet::entity::visit(T& userdata, bool(*callback)(T&, whippet::_component&))
 {
-	_world->forany_(
-		_guid,
+	_world->visit_(
+		_guid, std::type_index(typeid(whippet::_component)),
 		reinterpret_cast<void*>(&userdata),
-		reinterpret_cast<bool(*)(void*, whippet::_component*)>(callback)
+		reinterpret_cast<bool(*)(void*, void*)>(callback)
 	);
 }
 
@@ -41,11 +52,32 @@ inline
 void whippet::universe::install(void)
 {
 	const auto kind = std::type_index(typeid(C));
+
+	assume(!installed_(kind), "Duplicate invocations of install could bloat the binary");
 	if (installed_(kind))
 		return;
 
 	struct provider : whippet::_provider
 	{
+		bool is(const std::type_index id) override
+		{
+			if (std::type_index(typeid(int)) != std::type_index(typeid(const int)))
+				assume(
+					std::type_index(typeid(const C)) != id,
+					"Oppsie"
+				);
+
+			return std::type_index(typeid(C)) == id;
+		}
+
+		void* as(const std::type_index id, _component* me) override
+		{
+			if (id != std::type_index(typeid(C)))
+				return nullptr;
+
+			return reinterpret_cast<void*>(static_cast<C*>(me));
+		}
+
 		// need this to handler pre-init
 		struct record
 		{
@@ -56,30 +88,25 @@ void whippet::universe::install(void)
 
 			uint8_t _data[sizeof(C)];
 
-			C* get_T(void)
-			{
-				return reinterpret_cast<C*>(_data);
-			}
+			C* get_T(void) { return reinterpret_cast<C*>(_data); }
 
-			whippet::_component* get_c(void)
-			{
-				return static_cast<whippet::_component*>(get_T());
-			}
+			whippet::_component* get_c(void) { return static_cast<whippet::_component*>(get_T()); }
+
+			const whippet::_component* see_c(void)const { return static_cast<const whippet::_component*>(reinterpret_cast<const C*>(_data)); }
 
 			const C* get_T(void) const { return reinterpret_cast<const C*>(_data); }
 
 			const whippet::_component* get_c(void) const { return static_cast<const whippet::_component*>(get_T()); }
 
-			bool is_fresh(void) const
-			{
-				return get_c()->is_fresh();
-			}
+			bool inuse(void) const { return get_c()->inuse(); }
 
 			record(const whippet::entity& e, whippet::guid_t g)
 			{
 				auto comp = get_c();
 
-				// create the base component
+				assert(0 != g._weak);
+
+				// pre-new the base component
 				comp->_owner = e;
 				comp->_guid = g;
 				comp->_manager = e.world()._providers[std::type_index(typeid(C))].get();
@@ -92,7 +119,18 @@ void whippet::universe::install(void)
 
 			~record(void)
 			{
-				assert(is_fresh() && "Needs to be fresh before we can clean");
+				get_T()->~C();
+				assert((!inuse()) && "Needs to be fresh before we can clean");
+			}
+
+			static bool inuse(const record* r)
+			{
+				return (r->see_c()->inuse());
+			}
+
+			static void clean(record* r)
+			{
+				r->get_c()->_guid = 0;
 			}
 		};
 
@@ -112,52 +150,13 @@ void whippet::universe::install(void)
 		void detach(whippet::_component* self) override
 		{
 			for (auto it = _storage.begin(); it != _storage.end(); ++it)
-			{
-				auto& storage = *it;
-				if (storage.get_c() == self)
+				if (it->get_c() == self)
 				{
-					storage.get_T()->~C();
-
-					storage.get_c()->_guid = 0;
-
-					storage.get_c()->_owner = whippet::entity();
-					storage.get_c()->_manager = nullptr;
-
 					_storage.erase(it);
 					return;
 				}
-			}
+
 			assert(false && "Coudn't find component - was it already detached?");
-		}
-
-		void forall(const whippet::guid_t entity_guid, void* userdata, bool(*callback)(void*, void*)) override
-		{
-			for (auto& next : _storage)
-				if (entity_guid == next.get_c()->_owner._guid)
-					if (!callback(userdata, next.get_T()))
-						return;
-		}
-
-		void forany(const whippet::guid_t entity_guid, void* userdata, bool(*callback)(void*, _component*))
-		{
-			struct original
-			{
-				void* _userdata;
-				bool(*_callback)(void*, _component*);
-			};
-
-			original self{
-				userdata,
-				callback
-			};
-
-			forall(entity_guid, &self, [](void* u, void* c)
-			{
-				return reinterpret_cast<original*>(u)->_callback(
-					reinterpret_cast<original*>(u)->_userdata,
-					static_cast<whippet::_component*>(reinterpret_cast<C*>(c))
-				);
-			});
 		}
 
 		void purge(void) override
@@ -172,11 +171,25 @@ void whippet::universe::install(void)
 			}
 		}
 
-		virtual ~provider(void)
+		bool visit(const whippet::guid_t entity_guid, const bool cast_to_kind, void* userdata, bool(*callback)(void*, void*)) override
+		{
+			for (auto& storage : _storage)
+				if ((entity_guid == 0) || ((entity_guid != 0) && (storage.get_c()->_owner._guid == entity_guid)))
+					if (!callback(userdata, cast_to_kind ? storage.get_T() : storage.get_c()))
+						return false;
+
+			return true;
+		}
+
+		void weed(void) override { _storage.weed(); }
+
+#if _DEBUG
+		virtual ~provider(void) override
 		{
 			// needs to be empty due to ... reasons ...
 			assert(_storage.empty());
 		}
+#endif
 	};
 
 	_providers[kind] = std::make_unique<provider>();
@@ -224,10 +237,20 @@ S& whippet::universe::system(void)
 	return *(new (object) S());
 }
 
-#ifdef whippet__util
+template<typename T, typename C>
+void whippet::universe::visit(T& userdata, bool(*callback)(T&, C&))
+{
+	visit_(
+		0, std::type_index(typeid(C)),
+		reinterpret_cast<void*>(&userdata),
+		reinterpret_cast<bool(*)(void*, void*)>(callback)
+	);
+}
+
+#ifdef whippet__porcelain
 
 template<typename C>
-size_t whippet::util::component_count(whippet::entity& entity, bool(*filter)(C&))
+size_t whippet::porcelain::component_count(whippet::entity entity, bool(*filter)(C&))
 {
 	struct counter
 	{
@@ -235,12 +258,12 @@ size_t whippet::util::component_count(whippet::entity& entity, bool(*filter)(C&)
 		bool(*_filter)(C&);
 	};
 
-	counter self{
+	counter self = {
 		(size_t)0,
-		filter
+		filter,
 	};
 
-	entity.forall<counter, C>(self, [](counter& self, C& next)
+	entity.visit<counter, C>(self, [](counter& self, C& next)
 	{
 		if (self._filter(next))
 			++(self._count);
@@ -250,5 +273,38 @@ size_t whippet::util::component_count(whippet::entity& entity, bool(*filter)(C&)
 
 	return self._count;
 }
+
+template<typename C>
+C& whippet::porcelain::component(whippet::entity entity, const uint32_t index)
+{
+	struct output_t
+	{
+		C* _data;
+		uint32_t _togo;
+	};
+
+	output_t output = {
+		nullptr,
+		index,
+	};
+
+	assume(index < whippet::porcelain::component_count<C>(entity));
+
+	// iterate through stuff on us until we find one that's relevant
+	entity.visit<output_t, C>(output, [](output_t& output, C& found)
+	{
+		if (output._togo)
+			--(output._togo);
+		else
+			output._data = &found;
+
+		return nullptr == output._data;
+	});
+
+	assume(nullptr != output._data);
+
+	return *(output._data);
+}
+
 
 #endif

@@ -2,14 +2,14 @@
 ///
 /// my minimal-footprint remake of https://google.github.io/corgi/
 ///
-/// this rewrite is marked with >#< and uses std::type_index to key components and systems as well as allowing vardric attachment
+///
 ///
 
 #pragma once
 
 // ifdef; some "utility" junk is included that purists may not tolerate
 // ... the utility routines are done entirely in user-land so there's no reason that *you* couldn't do them by hand, but, they're used by the unit tests to achieve full coverage
-#define whippet__util
+#define whippet__porcelain
 
 // this provides a pretty "assume()" macro that you may not care about
 #include <pal.hpp>
@@ -44,6 +44,7 @@ namespace whippet
 		guid_t guid(void) const;
 
 		entity(void);
+		entity(universe*, const guid_t);
 
 		entity& operator=(const entity&);
 
@@ -52,11 +53,11 @@ namespace whippet
 
 		/// iterate through all components of any type
 		template<typename T>
-		void forany(T& userdata, bool(*callback)(T&, _component&));
+		void visit(T& userdata, bool(*callback)(T&, _component&));
 
 		/// iterate through components with the named type
 		template<typename T, typename C>
-		void forall(T& userdata, bool(*callback)(T&, C&));
+		void visit(T& userdata, bool(*callback)(T&, C&));
 
 		/// destroy this entity (and any attached components)
 		void remove(void);
@@ -66,7 +67,6 @@ namespace whippet
 		friend struct universe;
 		universe* _world;
 		guid_t _guid;
-		entity(universe*, const guid_t);
 	};
 
 	/// a base class for components
@@ -75,8 +75,7 @@ namespace whippet
 		_component(const _component&) = delete;
 		_component& operator=(const _component&) = delete;
 
-		/// does this need to be virtual?
-		virtual ~_component(void);
+		~_component(void);
 
 		universe& world(void) const;
 		entity owner(void) const;
@@ -86,9 +85,14 @@ namespace whippet
 		/// this is (by necesity) sort of a front-end for the actual removal logic
 		void detach(void);
 
-		/// casts or crashes
+		/// casts or nulls
 		template<typename C>
 		C* as(void);
+
+		bool is(const std::type_index) const;
+
+		template<typename C>
+		bool is(void) const { return is(std::type_index(typeid(C))); }
 
 	protected:
 		_component(void);
@@ -97,7 +101,7 @@ namespace whippet
 		entity _owner;
 		guid_t _guid;
 		_provider* _manager;
-		bool is_fresh(void) const;
+		bool inuse(void) const;
 	};
 
 
@@ -105,14 +109,25 @@ namespace whippet
 	{
 		typedef std::unique_ptr<_provider> ptr;
 
+		// TODO; use function pointers here instead
+
 		virtual void* alloc(const entity&) = 0;
+		virtual void* as(const std::type_index id, _component* me) = 0;
+		virtual bool is(const std::type_index id) = 0;
 		virtual void detach(_component*) = 0;
-		virtual void forall(const whippet::guid_t entity_guid, void* userdata, bool(*callback)(void*, void*)) = 0;
-		virtual void forany(const whippet::guid_t entity_guid, void* userdata, bool(*callback)(void*, _component*)) = 0;
 
 		/// a nesescary evil to remove components before the provider is destroyed
 		virtual void purge(void) = 0;
-		virtual ~_provider(void);
+
+		virtual bool visit(const whippet::guid_t entity_guid, const bool cast_to_kind, void* userdata, bool(*callback)(void*, void*)) = 0;
+
+		virtual void weed(void) = 0;
+
+
+#if _DEBUG
+		// this is *just* used to do an assertion on the cleanup of derrived classes
+		virtual ~_provider(void) {}
+#endif
 	};
 
 	struct _system
@@ -155,11 +170,13 @@ namespace whippet
 		template<typename S>
 		S& system(void);
 
+		template<typename T, typename C>
+		void visit(T&, bool(*)(T&, C&));
+
+		void weed(void);
 	private:
 		friend struct _component;
 		friend struct entity;
-
-		friend struct provider;
 
 		std::set<guid_t> _guid_active;
 		pal::map<std::type_index, _provider::ptr> _providers;
@@ -172,24 +189,27 @@ namespace whippet
 		void guid_release(guid_t);
 
 		// privates
-		void forall_(const guid_t, const std::type_index, void*, bool(*)(void*, void*));
-		void forany_(const guid_t, void*, bool(*)(void*, _component*));
+		void visit_(const guid_t, const std::type_index, void*, bool(*)(void*, void*));
 		bool installed_(const std::type_index)const;
 	};
 
-#ifdef whippet__util
+#ifdef whippet__porcelain
 	/// utility methods to do stuff
 	/// ... all done in user-land
-	struct util
+	struct porcelain
 	{
-		util(void) = delete;
-		util(const util&) = delete;
-		util& operator=(const util&) = delete;
+		porcelain(void) = delete;
+		porcelain(const porcelain&) = delete;
+		porcelain& operator=(const porcelain&) = delete;
+		~porcelain(void) = delete;
 
 		template<typename C>
-		static size_t component_count(entity&, bool(*)(C&));
+		static size_t component_count(entity, bool(*)(C&) = [](C&) { return true; });
 
-		static size_t components_count(entity&, bool(*)(_component&));
+		static size_t component_count(entity, bool(*)(_component&) = [](whippet::_component&) { return true; });
+
+		template<typename C>
+		static C& component(entity, const uint32_t = 0);
 	};
 #endif
 }

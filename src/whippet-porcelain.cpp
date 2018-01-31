@@ -1,9 +1,9 @@
 
 #include "whippet.hpp"
 
-#ifdef whippet__util
+#ifdef whippet__porcelain
 
-size_t whippet::util::components_count(whippet::entity& entity, bool(*filter)(whippet::_component&))
+size_t whippet::porcelain::component_count(whippet::entity entity, bool(*filter)(whippet::_component&))
 {
 	struct counter
 	{
@@ -16,7 +16,7 @@ size_t whippet::util::components_count(whippet::entity& entity, bool(*filter)(wh
 		filter
 	};
 
-	entity.forany<counter>(self, [](counter& self, whippet::_component& next)
+	entity.visit<counter>(self, [](counter& self, whippet::_component& next)
 	{
 		if (self._filter(next))
 			++(self._count);

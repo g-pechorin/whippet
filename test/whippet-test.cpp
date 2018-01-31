@@ -27,9 +27,6 @@ TEST(whippet, install)
 		whippet::universe world;
 		world.install<foonk>();
 	}
-
-	if (false)
-		FAIL() << "SAN";
 }
 
 /// create an entity
@@ -83,7 +80,6 @@ TEST(whippet, attach)
 		whippet::universe universe;
 
 		universe.install<foonk>();
-		universe.install<foonk>();
 
 		auto e0 = universe.create();
 		auto e1 = universe.create();
@@ -95,77 +91,99 @@ TEST(whippet, attach)
 	ASSERT_TRUE(was_eq);
 }
 
-#ifdef whippet__util
+#ifdef whippet__porcelain
 /// attach component and count it
 TEST(whippet, counting)
 {
+	static int total;
+	total = 0;
 	struct foonk : whippet::_component
 	{
 		std::string _name;
 		foonk(const char* name) :
 			_name(name)
 		{
+			++total;
+		}
+
+		~foonk()
+		{
+			--total;
 		}
 	};
 	struct boop : whippet::_component
 	{
 		boop(int)
-		{}
+		{
+			++total;
+		}
+
+		~boop()
+		{
+			--total;
+		}
 	};
 
-	whippet::universe universe;
+	{
+		whippet::universe universe;
 
-	universe.install<foonk>();
-	universe.install<boop>();
+		universe.install<foonk>();
+		universe.install<boop>();
 
-	auto e0 = universe.create();
-	auto e1 = universe.create();
-	auto e2 = universe.create();
+		auto e0 = universe.create();
+		auto e1 = universe.create();
+		auto e2 = universe.create();
 
-	e0.attach<boop>(3);
-	e1.attach<foonk>("foonk");
-	e2.attach<boop>(2);
+		ASSERT_EQ(0, total);
 
-	ASSERT_EQ(1, whippet::util::components_count(e0, [](whippet::_component&) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<boop>(e0, [](boop& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e0, [](foonk& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e0, [](foonk& them) { return them._name == "baur"; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e0, [](foonk& them) { return them._name == "foonk"; }));
+		e0.attach<boop>(3);
+		e1.attach<foonk>("foonk");
+		e2.attach<boop>(2);
 
-	ASSERT_EQ(1, whippet::util::components_count(e1, [](whippet::_component&) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<boop>(e1, [](boop& them) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<foonk>(e1, [](foonk& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e1, [](foonk& them) { return them._name == "baur"; }));
-	ASSERT_EQ(1, whippet::util::component_count<foonk>(e1, [](foonk& them) { return them._name == "foonk"; }));
+		ASSERT_EQ(3, total);
 
-	ASSERT_EQ(1, whippet::util::components_count(e2, [](whippet::_component&) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<boop>(e2, [](boop& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e2, [](foonk& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e2, [](foonk& them) { return them._name == "baur"; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e2, [](foonk& them) { return them._name == "foonk"; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count(e0));
+		ASSERT_EQ(1, whippet::porcelain::component_count<boop>(e0, [](boop& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0, [](foonk& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0, [](foonk& them) { return them._name == "baur"; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0, [](foonk& them) { return them._name == "foonk"; }));
 
-	e2.attach<foonk>("foonk");
-	e2.attach<foonk>("foonk");
-	e2.attach<foonk>("baur");
-	e2.attach<foonk>("grop");
+		ASSERT_EQ(1, whippet::porcelain::component_count(e1, [](whippet::_component&) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<boop>(e1, [](boop& them) { return true; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<foonk>(e1, [](foonk& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e1, [](foonk& them) { return them._name == "baur"; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<foonk>(e1, [](foonk& them) { return them._name == "foonk"; }));
 
-	ASSERT_EQ(1, whippet::util::components_count(e0, [](whippet::_component&) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<boop>(e0, [](boop& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e0, [](foonk& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e0, [](foonk& them) { return them._name == "baur"; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e0, [](foonk& them) { return them._name == "foonk"; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count(e2, [](whippet::_component&) { return true; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<boop>(e2, [](boop& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e2, [](foonk& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e2, [](foonk& them) { return them._name == "baur"; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e2, [](foonk& them) { return them._name == "foonk"; }));
 
-	ASSERT_EQ(1, whippet::util::components_count(e1, [](whippet::_component&) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<boop>(e1, [](boop& them) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<foonk>(e1, [](foonk& them) { return true; }));
-	ASSERT_EQ(0, whippet::util::component_count<foonk>(e1, [](foonk& them) { return them._name == "baur"; }));
-	ASSERT_EQ(1, whippet::util::component_count<foonk>(e1, [](foonk& them) { return them._name == "foonk"; }));
+		e2.attach<foonk>("foonk");
+		e2.attach<foonk>("foonk");
+		e2.attach<foonk>("baur");
+		e2.attach<foonk>("grop");
 
-	ASSERT_EQ(5, whippet::util::components_count(e2, [](whippet::_component&) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<boop>(e2, [](boop& them) { return true; }));
-	ASSERT_EQ(4, whippet::util::component_count<foonk>(e2, [](foonk& them) { return true; }));
-	ASSERT_EQ(1, whippet::util::component_count<foonk>(e2, [](foonk& them) { return them._name == "baur"; }));
-	ASSERT_EQ(2, whippet::util::component_count<foonk>(e2, [](foonk& them) { return them._name == "foonk"; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count(e0, [](whippet::_component&) { return true; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<boop>(e0, [](boop& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0, [](foonk& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0, [](foonk& them) { return them._name == "baur"; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0, [](foonk& them) { return them._name == "foonk"; }));
+
+		ASSERT_EQ(1, whippet::porcelain::component_count(e1, [](whippet::_component&) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<boop>(e1, [](boop& them) { return true; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<foonk>(e1, [](foonk& them) { return true; }));
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e1, [](foonk& them) { return them._name == "baur"; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<foonk>(e1, [](foonk& them) { return them._name == "foonk"; }));
+
+		ASSERT_EQ(5, whippet::porcelain::component_count(e2, [](whippet::_component&) { return true; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<boop>(e2, [](boop& them) { return true; }));
+		ASSERT_EQ(4, whippet::porcelain::component_count<foonk>(e2, [](foonk& them) { return true; }));
+		ASSERT_EQ(1, whippet::porcelain::component_count<foonk>(e2, [](foonk& them) { return them._name == "baur"; }));
+		ASSERT_EQ(2, whippet::porcelain::component_count<foonk>(e2, [](foonk& them) { return them._name == "foonk"; }));
+	}
+	ASSERT_EQ(0, total);
 }
 #endif
 
@@ -232,4 +250,108 @@ TEST(whippet, check_system_lifecycle)
 	}
 
 	ASSERT_EQ(true, cleaned) << "system wasn't cleaned up";
+}
+
+#ifdef whippet__porcelain
+TEST(whippet, updoot_components)
+{
+	struct foonk : whippet::_component
+	{
+		std::string _name;
+		int _count = 1;
+		foonk(const char* name) :
+			_name(name)
+		{
+		}
+	};
+
+	struct boop : whippet::_component
+	{
+		int _count;
+		boop(int i) :
+			_count(i)
+		{
+		}
+	};
+
+	whippet::universe universe;
+
+	universe.install<foonk>();
+	universe.install<boop>();
+
+	auto e0 = universe.create();
+	auto e1 = universe.create();
+	auto e2 = universe.create();
+
+	e0.attach<boop>(3);
+	e1.attach<foonk>("foonk");
+	e2.attach<boop>(2);
+
+	// these need to be references
+	auto& f0 = e2.attach<foonk>("foonk");
+	auto& f1 = e2.attach<foonk>("baur");
+	auto& f2 = e2.attach<foonk>("baur"); f2._count = -23;
+	auto& f3 = e2.attach<foonk>("grop"); f3._count = -9;
+
+	int i;
+	universe.visit<int, foonk>(i, [](int&, foonk& component)
+	{
+		if (component._name == "baur")
+			component._count += 3;
+		return true;
+	});
+
+	universe.visit<int, boop>(i, [](int&, boop& component)
+	{
+		component._count += 1;
+		return true;
+	});
+
+	// check boop
+	{
+		ASSERT_EQ(1, whippet::porcelain::component_count<boop>(e0));
+		ASSERT_EQ(0, whippet::porcelain::component_count<boop>(e1));
+		ASSERT_EQ(1, whippet::porcelain::component_count<boop>(e2));
+
+		ASSERT_EQ(4, whippet::porcelain::component<boop>(e0)._count);
+
+		ASSERT_EQ(3, whippet::porcelain::component<boop>(e2)._count);
+	}
+
+	// check foonk
+	{
+		ASSERT_EQ(0, whippet::porcelain::component_count<foonk>(e0));
+		ASSERT_EQ(1, whippet::porcelain::component_count<foonk>(e1));
+		ASSERT_EQ(4, whippet::porcelain::component_count<foonk>(e2));
+
+		ASSERT_EQ(1, f0._count);
+		ASSERT_EQ(4, f1._count);
+		ASSERT_EQ(-20, f2._count);
+		ASSERT_EQ(-9, f3._count);
+	}
+}
+#endif
+
+TEST(whippet, is_as)
+{
+	struct foo : whippet::_component
+	{
+		foo(int) {}
+	};
+	struct bar : whippet::_component
+	{
+		bar(double) {}
+	};
+
+	whippet::universe universe;
+
+	universe.install<foo>();
+	universe.install<bar>();
+
+	auto e0 = universe.create();
+
+	ASSERT_FALSE(e0.attach<foo>(19).is<bar>());
+	ASSERT_FALSE(e0.attach<bar>(.9).is<foo>());
+	ASSERT_TRUE(e0.attach<foo>(18).is<foo>());
+	ASSERT_TRUE(e0.attach<bar>(.8).is<bar>());
 }
