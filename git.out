@@ -1,14 +1,7 @@
 git@github.com:g-pechorin/whippet.git
 
-;	// prefix everything with an 8061 date as a version
-;	prefix '.*(c|cpp|h|hpp)' '// date; ${date8061}'
-;	prefix '.*(c|cpp|h|hpp)' '// node; ${node}'
-
-;	// stick a copy of the AGPL into each file
-;	prefix 'LICENSE.txt' '.*(c|h)pp' '// '
-
 	; cascade the contents of ../pal (behind us)
-	cascade '../pal'
+	cascade ../pal
 
 ;	; prevent any files from being in these folders (the later steps will do some renaming)
 ;	prevent src/(main|test)/*
@@ -28,4 +21,9 @@ git@github.com:g-pechorin/whippet.git
 		src/test/cgc/(.*.(c|h)pp)
 		test/$1
 
-	exclude 'CMakeLists.txt'
+	exclude CMakeLists.txt
+
+	; stick the LICENSE into the files with the passed prefix
+	license
+		(inc|src|test)/.*\.[ch]pp
+		// LICENSE-whippet.txt
