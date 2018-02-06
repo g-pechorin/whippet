@@ -119,6 +119,17 @@ namespace pal
 		bool contains(const K& value) const { return end() != find(value); }
 	};
 
+	template<typename K, typename V>
+	class map_instances
+	{
+		std::map<const K*, V> _data;
+	public:
+		void erase(const K* key) { _data.erase(key); }
+
+		V& operator[](const K& key) { return _data[&key]; }
+		V& operator[](const K* key) { return _data[key]; }
+	};
+
 	/// hack to whack stuff into places where it doesn't want to be
 	template<typename E>
 	struct qpack
