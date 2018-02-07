@@ -42,23 +42,23 @@
 #	define _fail_line_ "\n\t>" __FUNCTION__ "(...)\n\t@" __FILE__ "\n\t:"  _fail_line__(__LINE__)
 
 // if _DEBUG then fail spits out a big nice message/trace
-#define fael(MESSAGE, ...) do { fflush(stdout); fprintf(stderr, "FAIL: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } while (false)
+#define fael(MESSAGE, ...) do { fflush(stderr); fprintf(stderr, "FAIL: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } while (false)
 
 // like fail but, no exit
-#define warn(MESSAGE, ...) do { fflush(stdout); fprintf(stderr, "WARN: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); } while (false)
+#define warn(MESSAGE, ...) do { fflush(stderr); fprintf(stderr, "WARN: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); } while (false)
 
 // debug-only!
 #	define STUB(MESSAGE, ...) fael(MESSAGE, __VA_ARGS__)
-#	define TODO(MESSAGE, ...) do { static bool TODO = true; if (TODO) { TODO = false; fflush(stdout); fprintf(stderr, "TODO: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr, _fail_line_ "\n"); fflush(stderr); } } while(false)
+#	define TODO(MESSAGE, ...) do { static bool TODO = true; if (TODO) { TODO = false; fflush(stderr); fprintf(stderr, "TODO: "); fprintf(stderr, MESSAGE, __VA_ARGS__); fprintf(stderr, _fail_line_ "\n"); fflush(stderr); } } while(false)
 
 // like assert, but, doesn't exit
-#	define assume(CONDITION, ...) do { if (!(CONDITION)) { fflush(stdout); fprintf(stderr, "ASSUMPTION; "  #CONDITION "\n"); fprintf(stderr, ""  __VA_ARGS__); fprintf(stderr, _fail_line_ "\n"); fflush(stderr); } } while (false)
+#	define assume(CONDITION, ...) do { if (!(CONDITION)) { fflush(stderr); fprintf(stderr, "ASSUMPTION; "  #CONDITION "\n"); fprintf(stderr, ""  __VA_ARGS__); fprintf(stderr, _fail_line_ "\n"); fflush(stderr); } } while (false)
 
 // like assert, but, it's always used
-#	define require(CONDITION, ...) do { if (!(CONDITION)) { fflush(stdout); fprintf(stderr, "REQUIREMENT: " #CONDITION "\n"); fprintf(stderr, "" __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } } while (false)
+#	define require(CONDITION, ...) do { if (!(CONDITION)) { fflush(stderr); fprintf(stderr, "REQUIREMENT: " #CONDITION "\n"); fprintf(stderr, "" __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } } while (false)
 
 // an assert that takes a long message
-#	define passert(CONDITION, ...) do { if (!(CONDITION)) { fflush(stdout); fprintf(stderr, "ASSERT: " #CONDITION "\n"); fprintf(stderr, "" __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } } while (false)
+#	define passert(CONDITION, ...) do { if (!(CONDITION)) { fflush(stderr); fprintf(stderr, "ASSERT: " #CONDITION "\n"); fprintf(stderr, "" __VA_ARGS__); fprintf(stderr,_fail_line_ "\n"); fflush(stderr); exit(EXIT_FAILURE); } } while (false)
 
 
 #define debug_var(NAME,VALUE) auto NAME = (VALUE)
