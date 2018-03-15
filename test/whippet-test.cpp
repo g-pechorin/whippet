@@ -15,29 +15,16 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+/// test to see if testing works
 TEST(whippet, nothing)
 {
 	;
 }
 
+/// test to see if the "universe" can be created
 TEST(whippet, turn_on)
 {
 	whippet::universe universe;
-}
-
-TEST(whippet, install)
-{
-	struct foonk : whippet::_component
-	{
-		foonk(const char*)
-		{
-		}
-	};
-
-	{
-		whippet::universe world;
-		world.install<foonk>();
-	}
 }
 
 /// create an entity
@@ -71,6 +58,25 @@ TEST(whippet, create2r1c2)
 	auto e3 = universe.create();
 	ASSERT_NE(e1.guid(), e3.guid());
 	ASSERT_NE(e2.guid(), e3.guid());
+}
+
+/// test to install a component
+TEST(whippet, install)
+{
+	/// this is the bare minimum that a component needs to implement
+	struct foonk : whippet::_component
+	{
+		/// to hack around some subtle quirks of my approach - need to pass something to component constructors
+		foonk(const char*)
+		{
+			// at this point; the baseclass has already been init so you're good to start doing stuff
+		}
+	};
+
+	{
+		whippet::universe world;
+		world.install<foonk>();
+	}
 }
 
 /// attach component
@@ -343,6 +349,7 @@ TEST(whippet, updoot_components)
 }
 #endif
 
+/// tests the `is<?>()` function
 TEST(whippet, is_as)
 {
 	struct foo : whippet::_component
@@ -361,7 +368,9 @@ TEST(whippet, is_as)
 
 	auto e0 = universe.create();
 
-	ASSERT_FALSE(e0.attach<foo>(19).is<bar>());
+	// attached components are `whippet::_component&` so some method is needed to check before casting can be performed
+	auto& component = e0.attach<foo>(19);
+	ASSERT_FALSE(component.is<bar>());
 	ASSERT_FALSE(e0.attach<bar>(.9).is<foo>());
 	ASSERT_TRUE(e0.attach<foo>(18).is<foo>());
 	ASSERT_TRUE(e0.attach<bar>(.8).is<bar>());
